@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+sqlalchemy
+transformers
+gradio
+tensorflow
+tf-keras
+python-multipart
+aiofiles
+numpy
+Pillow
+chromadb
+torch
