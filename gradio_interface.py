@@ -1,15 +1,13 @@
 import gradio as gr
 import requests
-from PIL import Image
 import json
-import time
 
 API_URL = "http://127.0.0.1:8000"
 
 def check_api_connection():
     try:
-        requests.get(f"{API_URL}/")
-        return True
+        response = requests.get(f"{API_URL}/")
+        return response.status_code == 200
     except requests.exceptions.ConnectionError:
         return False
 
@@ -29,7 +27,7 @@ def upload_memory(caption, content, emotional_tags, file):
         return {"error": "Please upload an image"}
     
     tags = [tag.strip() for tag in emotional_tags.split(',')]
-    files = {'file': file}
+    files = {'file': (file.name, file)}
     data = {
         'caption': caption,
         'content': content,
@@ -48,7 +46,7 @@ def search_memories(query):
     memories = response.json()
     
     gallery_items = []
-    if memories:
+    if memories and isinstance(memories, list):
         for memory in memories:
             if "image_path" in memory:
                 gallery_items.append((memory["image_path"], memory["caption"]))
@@ -119,4 +117,4 @@ def create_interface():
 
 if __name__ == "__main__":
     demo = create_interface()
-    demo.launch(share=True)  # Added share=True for public access
+    demo.launch(show_error=True)

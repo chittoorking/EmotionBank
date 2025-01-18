@@ -1,27 +1,42 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from models import Memory
 from memory_handler import MemoryHandler
 from emotion_tagging import EmotionAnalyzer
 from ai_companion import AICompanion
 from datetime import datetime
-from database import SessionLocal, init_db, Base
+from database import SessionLocal, init_db
 import uvicorn
 import json
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="EmotionBank API")
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Initialize database
 init_db()
 db = SessionLocal()
 
-# Initialize components in correct order
+# Initialize components
 emotion_analyzer = EmotionAnalyzer()
 memory_handler = MemoryHandler(db, emotion_analyzer)
 ai_companion = AICompanion(memory_handler)
 
-@app.get('/')
+@app.get("/")
 async def read_root():
-    return "Hello there! This is the backend server of Emotion Bank"
+    return {"status": "ok", "message": "EmotionBank API is running"}
 
 @app.post("/upload_memory/")
 async def upload_memory(
@@ -30,13 +45,11 @@ async def upload_memory(
     content: str = Form(...),
     emotional_tags: str = Form(...)
 ):
+    logger.info(f"Received upload request - Caption: {caption}")
     try:
         # Parse emotional tags
-        try:
-            tags = json.loads(emotional_tags)
-        except json.JSONDecodeError:
-            tags = [tag.strip() for tag in emotional_tags.split(',')]
-
+        tags = json.loads(emotional_tags)
+        
         # Create memory object
         memory = Memory(
             caption=caption,
@@ -47,24 +60,17 @@ async def upload_memory(
         
         # Upload memory and handle file
         result = await memory_handler.upload_memory(memory, file)
+        logger.info("Upload successful")
         return result
+        
     except Exception as e:
+        logger.error(f"Upload failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/retrieve_memories/")
-async def retrieve_memories(
-    query: str = None,
-    emotion: str = None,
-    similar_to_id: int = None,
-    limit: int = 10
-):
+async def retrieve_memories(query: str = None):
     try:
-        memories = await memory_handler.retrieve_memories(
-            query=query,
-            emotion=emotion,
-            similar_to_id=similar_to_id,
-            limit=limit
-        )
+        memories = await memory_handler.retrieve_memories(query=query)
         return memories
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -78,4 +84,4 @@ async def chat_with_ai(user_input: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8000)
