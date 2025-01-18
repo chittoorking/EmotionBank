@@ -19,6 +19,10 @@ emotion_analyzer = EmotionAnalyzer()
 memory_handler = MemoryHandler(db, emotion_analyzer)
 ai_companion = AICompanion(memory_handler)
 
+@app.get('/')
+async def read_root():
+    return "Hello there! This is the backend server of Emotion Bank"
+
 @app.post("/upload_memory/")
 async def upload_memory(
     file: UploadFile = File(...),

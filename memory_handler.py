@@ -8,22 +8,29 @@ from datetime import datetime
 from typing import List, Dict
 from models import Memory
 import chromadb
-from chromadb.config import Settings
 
 class MemoryHandler:
     def __init__(self, db: Session, emotion_analyzer):
-        self.db = db
+        self.db = db 
         self.emotion_analyzer = emotion_analyzer
         
         # Initialize ChromaDB for vector search
-        self.vector_db = chromadb.Client(Settings(
-            chroma_db_impl="duckdb+parquet",
-            persist_directory="./vector_db"
-        ))
-        
-        # Create collections for different types of embeddings
-        self.text_collection = self.vector_db.create_collection(name="text_memories")
-        self.image_collection = self.vector_db.create_collection(name="image_memories")
+        self.vector_db = chromadb.PersistentClient(path="./vector_db")
+        print(self.vector_db.list_collections())
+        # Check if the collection 'text_memories' exists
+        collections = self.vector_db.list_collections()
+        if "text_memories" in collections:
+            # If the collection exists, get it
+            self.text_collection = self.vector_db.get_collection(name="text_memories")
+        else:
+            # If the collection doesn't exist, create a new one
+            self.text_collection = self.vector_db.create_collection(name="text_memories")
+
+        # Similarly for image collection
+        if "image_memories" in collections:
+            self.image_collection = self.vector_db.get_collection(name="image_memories")
+        else:
+            self.image_collection = self.vector_db.create_collection(name="image_memories")
         
         # Ensure directories exist
         os.makedirs("uploads/images", exist_ok=True)
