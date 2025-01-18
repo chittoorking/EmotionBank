@@ -6,7 +6,7 @@ import aiofiles
 import numpy as np
 from datetime import datetime
 from typing import List, Dict
-from models import Memory  # Added this import
+from models import Memory
 import chromadb
 from chromadb.config import Settings
 
@@ -20,44 +20,68 @@ class MemoryHandler:
             chroma_db_impl="duckdb+parquet",
             persist_directory="./vector_db"
         ))
-        self.collection = self.vector_db.create_collection(name="memories")
+        
+        # Create collections for different types of embeddings
+        self.text_collection = self.vector_db.create_collection(name="text_memories")
+        self.image_collection = self.vector_db.create_collection(name="image_memories")
         
         # Ensure directories exist
-        os.makedirs("images", exist_ok=True)
+        os.makedirs("uploads/images", exist_ok=True)
+
+    async def save_uploaded_file(self, file: UploadFile) -> str:
+        """Save uploaded file and return the file path"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{timestamp}_{file.filename}"
+        file_path = f"uploads/images/{filename}"
+        
+        async with aiofiles.open(file_path, "wb") as buffer:
+            content = await file.read()
+            await buffer.write(content)
+        
+        return file_path
 
     async def upload_memory(self, memory: Memory, file: UploadFile) -> Dict:
         try:
-            # Save image file
-            file_location = f"images/{file.filename}"
-            async with aiofiles.open(file_location, "wb") as buffer:
-                content = await file.read()
-                await buffer.write(content)
+            # Save uploaded file
+            file_path = await self.save_uploaded_file(file)
             
             # Analyze text content
             text_analysis = self.emotion_analyzer.analyze_text(memory.content)
             
             # Analyze image
-            image_analysis = self.emotion_analyzer.analyze_image(file_location)
+            image_analysis = self.emotion_analyzer.analyze_image(file_path)
+            
+            # Combine analyses
+            combined_analysis = self.emotion_analyzer.combine_analysis(
+                text_analysis, image_analysis
+            )
             
             # Update memory object with analysis results
-            memory.image_path = file_location
+            memory.image_path = file_path
             memory.text_embedding = text_analysis["text_embedding"]
             memory.image_embedding = image_analysis["image_embedding"]
-            memory.suggested_tags = text_analysis["emotion_tags"]
-            memory.sentiment_scores = {
-                "text": text_analysis["emotion_scores"],
-                "image": image_analysis["emotion_scores"]
-            }
+            memory.suggested_tags = combined_analysis["primary_emotions"]
+            memory.sentiment_scores = combined_analysis["emotion_scores"]
             
             # Save to database
             self.db.add(memory)
             self.db.commit()
             self.db.refresh(memory)
             
-            # Add to vector database for similarity search
-            self.collection.add(
+            # Add to vector databases
+            self.text_collection.add(
                 ids=[str(memory.id)],
                 embeddings=[memory.text_embedding],
+                metadatas=[{
+                    "caption": memory.caption,
+                    "emotional_tags": memory.emotional_tags,
+                    "timestamp": memory.timestamp.isoformat()
+                }]
+            )
+            
+            self.image_collection.add(
+                ids=[str(memory.id)],
+                embeddings=[memory.image_embedding],
                 metadatas=[{
                     "caption": memory.caption,
                     "emotional_tags": memory.emotional_tags,
@@ -73,7 +97,7 @@ class MemoryHandler:
                 "suggested_tags": memory.suggested_tags,
                 "sentiment_scores": memory.sentiment_scores,
                 "timestamp": memory.timestamp,
-                "file_location": file_location
+                "file_path": file_path
             }
             
         except Exception as e:
@@ -90,23 +114,46 @@ class MemoryHandler:
                 # Get similar memories using vector similarity
                 memory = self.db.query(Memory).filter(Memory.id == similar_to_id).first()
                 if memory:
-                    results = self.collection.query(
+                    # Search both text and image collections
+                    text_results = self.text_collection.query(
                         query_embeddings=[memory.text_embedding],
                         n_results=limit
                     )
-                    memory_ids = [int(id) for id in results['ids'][0]]
-                    memories = self.db.query(Memory).filter(Memory.id.in_(memory_ids)).all()
+                    image_results = self.image_collection.query(
+                        query_embeddings=[memory.image_embedding],
+                        n_results=limit
+                    )
+                    
+                    # Combine and deduplicate results
+                    memory_ids = list(set([
+                        int(id) for id in text_results['ids'][0] + image_results['ids'][0]
+                    ]))
+                    memories = self.db.query(Memory).filter(
+                        Memory.id.in_(memory_ids)
+                    ).limit(limit).all()
+                    
             elif emotion:
                 # Filter by emotion tag
                 memories = self.db.query(Memory).filter(
                     Memory.emotional_tags.contains([emotion])
                 ).limit(limit).all()
+                
             elif query:
-                # Text search in captions and content
+                # Analyze query text for embedding
+                query_analysis = self.emotion_analyzer.analyze_text(query)
+                query_embedding = query_analysis["text_embedding"]
+                
+                # Search using query embedding
+                results = self.text_collection.query(
+                    query_embeddings=[query_embedding],
+                    n_results=limit
+                )
+                
+                memory_ids = [int(id) for id in results['ids'][0]]
                 memories = self.db.query(Memory).filter(
-                    (Memory.caption.contains(query)) | 
-                    (Memory.content.contains(query))
-                ).limit(limit).all()
+                    Memory.id.in_(memory_ids)
+                ).all()
+                
             else:
                 memories = self.db.query(Memory).limit(limit).all()
 
@@ -116,12 +163,14 @@ class MemoryHandler:
                     "caption": memory.caption,
                     "content": memory.content,
                     "emotional_tags": memory.emotional_tags,
+                    "suggested_tags": memory.suggested_tags,
+                    "sentiment_scores": memory.sentiment_scores,
                     "timestamp": memory.timestamp,
-                    "image_path": memory.image_path,
-                    "sentiment_scores": memory.sentiment_scores
+                    "image_path": memory.image_path
                 }
                 for memory in memories
             ]
+            
         except Exception as e:
             logging.error(f"Error retrieving memories: {str(e)}")
             raise Exception(f"Failed to retrieve memories: {str(e)}")

@@ -2,9 +2,28 @@ import gradio as gr
 import requests
 from PIL import Image
 import json
+import time
 
 API_URL = "http://localhost:8000"
 
+def check_api_connection():
+    try:
+        requests.get(f"{API_URL}/")
+        return True
+    except requests.exceptions.ConnectionError:
+        return False
+
+def handle_api_error(func):
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except requests.exceptions.ConnectionError:
+            return {"error": "Cannot connect to the backend server. Please ensure the FastAPI server is running."}
+        except Exception as e:
+            return {"error": f"An error occurred: {str(e)}"}
+    return wrapper
+
+@handle_api_error
 def upload_memory(caption, content, emotional_tags, file):
     if file is None:
         return {"error": "Please upload an image"}
@@ -22,12 +41,12 @@ def upload_memory(caption, content, emotional_tags, file):
                           data=data)
     return response.json()
 
+@handle_api_error
 def search_memories(query):
-    response = requests.get(f"{API_URL}/retrieve_memory/", 
+    response = requests.get(f"{API_URL}/retrieve_memories/", 
                          params={"query": query})
     memories = response.json()
     
-    # Prepare gallery items
     gallery_items = []
     if memories:
         for memory in memories:
@@ -36,18 +55,21 @@ def search_memories(query):
     
     return gallery_items, memories
 
+@handle_api_error
 def chat_with_ai(user_input, history):
     response = requests.get(f"{API_URL}/chat/", 
                          params={"user_input": user_input})
     ai_response = response.json()
     
-    # Update chat history
     history.append((user_input, ai_response["message"]))
     
     return history, ai_response.get("related_memories", [])
 
 def create_interface():
     with gr.Blocks(theme=gr.themes.Soft()) as demo:
+        if not check_api_connection():
+            gr.Markdown("⚠️ Warning: Cannot connect to backend server. Please start the FastAPI server first.")
+        
         gr.Markdown("# Emotion Bank")
         
         with gr.Tabs():
@@ -57,7 +79,7 @@ def create_interface():
                     caption = gr.Textbox(label="Caption", placeholder="Enter a title for your memory")
                     content = gr.Textbox(label="Description", placeholder="Describe your memory...", lines=3)
                     emotional_tags = gr.Textbox(label="Emotional Tags", placeholder="happy, excited, grateful...")
-                    image_file = gr.File(label="Upload Image", type="file")
+                    image_file = gr.File(label="Upload Image", type="binary")
                     upload_button = gr.Button("Save Memory", variant="primary")
                     upload_output = gr.JSON(label="Upload Result")
 
@@ -97,4 +119,4 @@ def create_interface():
 
 if __name__ == "__main__":
     demo = create_interface()
-    demo.launch()
+    demo.launch(share=True)  # Added share=True for public access
