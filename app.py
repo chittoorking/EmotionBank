@@ -9,10 +9,16 @@ from database import SessionLocal, init_db
 import uvicorn
 import json
 import logging
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+TEMP_FOLDER = "/tmp/memory_uploads"  # Designated temp folder
+
+# Ensure the temporary folder exists
+os.makedirs(TEMP_FOLDER, exist_ok=True)
 
 app = FastAPI(title="EmotionBank API")
 
@@ -40,7 +46,7 @@ async def read_root():
 
 @app.post("/upload_memory/")
 async def upload_memory(
-    file: UploadFile = File(...),
+    file_path:str = Form(...) ,
     caption: str = Form(...),
     content: str = Form(...),
     emotional_tags: str = Form(...)
@@ -52,21 +58,25 @@ async def upload_memory(
         
         # Create memory object
         memory = Memory(
+            file_path=file_path,
             caption=caption,
             content=content,
             emotional_tags=tags,
             timestamp=datetime.now()
         )
-        
-        # Upload memory and handle file
-        result = await memory_handler.upload_memory(memory, file)
-        logger.info("Upload successful")
-        return result
+                
+        try:
+            # Pass the file path to the memory handler
+            result = await memory_handler.upload_memory(memory)
+            logger.info("Upload successful")
+            return result
+        except:
+            logger.error("Upload failed")
         
     except Exception as e:
         logger.error(f"Upload failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+    
 @app.get("/retrieve_memories/")
 async def retrieve_memories(query: str = None):
     try:

@@ -35,22 +35,34 @@ class MemoryHandler:
         # Ensure directories exist
         os.makedirs("uploads/images", exist_ok=True)
 
-    async def save_uploaded_file(self, file: UploadFile) -> str:
-        """Save uploaded file and return the file path"""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{timestamp}_{file.filename}"
-        file_path = f"uploads/images/{filename}"
-        
-        async with aiofiles.open(file_path, "wb") as buffer:
-            content = await file.read()
-            await buffer.write(content)
-        
-        return file_path
+    async def save_uploaded_file(self, file_path_temp: str) -> str:
+        """Save uploaded file and return the final file path"""
+        try:
+            # Extract the basename of the uploaded file
+            original_filename = os.path.basename(file_path_temp)
 
-    async def upload_memory(self, memory: Memory, file: UploadFile) -> Dict:
+            # Define the final file path
+            file_path = os.path.join("uploads", "images", original_filename)
+
+            # Ensure the destination directory exists
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+            # Save the file to the final path
+            async with aiofiles.open(file_path, "wb") as buffer:
+                async with aiofiles.open(file_path_temp, "rb") as temp_file:
+                    content = await temp_file.read()
+                    await buffer.write(content)
+
+            logging.info(f"File saved successfully: {file_path}")
+            return file_path
+        except Exception as e:
+            logging.error(f"Error saving uploaded file: {e}")
+            raise RuntimeError(f"Error saving uploaded file: {e}")
+
+    async def upload_memory(self, memory: Memory):
         try:
             # Save uploaded file
-            file_path = await self.save_uploaded_file(file)
+            file_path = memory.image_path
             
             # Analyze text content
             text_analysis = self.emotion_analyzer.analyze_text(memory.content)
@@ -132,9 +144,7 @@ class MemoryHandler:
                     )
                     
                     # Combine and deduplicate results
-                    memory_ids = list(set([
-                        int(id) for id in text_results['ids'][0] + image_results['ids'][0]
-                    ]))
+                    memory_ids = list(set([int(id) for id in text_results['ids'][0] + image_results['ids'][0]]))
                     memories = self.db.query(Memory).filter(
                         Memory.id.in_(memory_ids)
                     ).limit(limit).all()

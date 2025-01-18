@@ -1,8 +1,12 @@
 import gradio as gr
 import requests
 import json
+import os
+import shutil
+import time
 
 API_URL = "http://127.0.0.1:8000"
+UPLOAD_FOLDER = "./uploads/images"  # Directory to save uploaded files
 
 def check_api_connection():
     try:
@@ -26,18 +30,43 @@ def upload_memory(caption, content, emotional_tags, file):
     if file is None:
         return {"error": "Please upload an image"}
     
-    tags = [tag.strip() for tag in emotional_tags.split(',')]
-    files = {'file': (file.name, file)}
-    data = {
-        'caption': caption,
-        'content': content,
-        'emotional_tags': json.dumps(tags)
-    }
-    
-    response = requests.post(f"{API_URL}/upload_memory/", 
-                          files=files, 
-                          data=data)
-    return response.json()
+    try:
+        # Ensure the upload directory exists
+        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+        
+        # Generate unique filename while preserving original filename
+        timestamp = str(int(time.time()))
+        original_filename = os.path.basename(file.name)
+        temp_filename = f"{timestamp}_{original_filename}"
+        temp_file_path = os.path.join(UPLOAD_FOLDER, temp_filename)
+        
+        # Copy the uploaded file to temp location using simple copy
+        shutil.copy(file.name, temp_file_path)
+        
+        tags = [tag.strip() for tag in emotional_tags.split(',')]
+        data = {
+            'file_path':temp_file_path,
+            'caption': caption,
+            'content': content,
+            'emotional_tags': json.dumps(tags)
+        }
+        
+        response = requests.post(f"{API_URL}/upload_memory/", 
+                              data=data)
+        
+        return response.json()
+        
+    except shutil.SameFileError:
+        return {"error": "Source and destination file are the same"}
+    except Exception as e:
+        return {"error": f"An error occurred: {str(e)}"}
+    finally:
+        # Clean up: remove the temp file if it exists
+        if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
+            try:
+                os.remove(temp_file_path)
+            except Exception as e:
+                print(f"Error removing temp file: {e}")
 
 @handle_api_error
 def search_memories(query):
@@ -77,7 +106,7 @@ def create_interface():
                     caption = gr.Textbox(label="Caption", placeholder="Enter a title for your memory")
                     content = gr.Textbox(label="Description", placeholder="Describe your memory...", lines=3)
                     emotional_tags = gr.Textbox(label="Emotional Tags", placeholder="happy, excited, grateful...")
-                    image_file = gr.File(label="Upload Image", type="binary")
+                    image_file = gr.File(label="Upload Image", type="filepath")  # Changed to 'binary'
                     upload_button = gr.Button("Save Memory", variant="primary")
                     upload_output = gr.JSON(label="Upload Result")
 
