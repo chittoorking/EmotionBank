@@ -45,8 +45,6 @@ def upload_memory(caption, content, emotional_tags, file):
         temp_filename = f"{timestamp}_{original_filename}"
 
         temp_file_path = f"{upload_folder}\\{temp_filename}"  # Using `/` explicitly
-
-        print(temp_file_path)
         
         # Copy the uploaded file to temp location using simple copy
         shutil.copy2(file.name, temp_file_path)
