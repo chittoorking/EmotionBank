@@ -1,11 +1,16 @@
 from typing import Dict, List
 import random
-from datetime import datetime, timedelta
-import numpy as np
+from datetime import datetime
+from transformers import pipeline
+import logging
 
 class AICompanion:
     def __init__(self, memory_handler):
         self.memory_handler = memory_handler
+        
+        # Initialize a smaller language model for conversation
+        self.language_model = pipeline("text-generation", model="distilgpt2")  # Use a smaller model
+
         
         # Enhanced reflection prompts based on emotions
         self.reflection_prompts = {
@@ -82,12 +87,17 @@ class AICompanion:
                 "detected_emotion": user_emotion
             }
             
-            # Retrieve relevant memories
-            memories = await self.memory_handler.retrieve_memories(
-                query=user_input,
-                emotion=user_emotion,
-                limit=3
-            )
+            # Retrieve relevant memories, handle case if no memories exist
+            try:
+                memories = await self.memory_handler.retrieve_memories(
+                    query=user_input,
+                    emotion=user_emotion,
+                    limit=3
+                )
+            except Exception as e:
+                logging.error(f"Error retrieving memories: {str(e)}")
+                memories = []  # Set memories to an empty list if retrieval fails
+
             
             # Generate conversational response
             if memories:
