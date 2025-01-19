@@ -6,7 +6,7 @@ import aiofiles
 import numpy as np
 from datetime import datetime
 from typing import List, Dict
-from models import Memory
+from database import Memory
 import chromadb
 
 class MemoryHandler:

@@ -1,6 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from models import Memory
+from database import Memory
 from memory_handler import MemoryHandler
 from emotion_tagging import EmotionAnalyzer
 from ai_companion import AICompanion
