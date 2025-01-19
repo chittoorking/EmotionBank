@@ -62,6 +62,7 @@ class EmotionAnalyzer:
 
     def analyze_image(self, image_path: str) -> Dict:
         try:
+            print(image_path)
             # Load and process image
             image = Image.open(image_path).convert('RGB')
             inputs = self.clip_processor(images=image, return_tensors="pt")

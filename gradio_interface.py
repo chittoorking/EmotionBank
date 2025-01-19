@@ -34,18 +34,26 @@ def upload_memory(caption, content, emotional_tags, file):
         # Ensure the upload directory exists
         os.makedirs(UPLOAD_FOLDER, exist_ok=True)
         
+        current_directory = os.getcwd() 
+
+        # Construct the full path to the upload folder
+        upload_folder = os.path.join(current_directory, "uploads\\images") 
+
         # Generate unique filename while preserving original filename
         timestamp = str(int(time.time()))
         original_filename = os.path.basename(file.name)
         temp_filename = f"{timestamp}_{original_filename}"
-        temp_file_path = os.path.join(UPLOAD_FOLDER, temp_filename)
+
+        temp_file_path = f"{upload_folder}\\{temp_filename}"  # Using `/` explicitly
+
+        print(temp_file_path)
         
         # Copy the uploaded file to temp location using simple copy
-        shutil.copy(file.name, temp_file_path)
+        shutil.copy2(file.name, temp_file_path)
         
         tags = [tag.strip() for tag in emotional_tags.split(',')]
         data = {
-            'file_path':temp_file_path,
+            'image_path':temp_file_path,
             'caption': caption,
             'content': content,
             'emotional_tags': json.dumps(tags)
@@ -60,13 +68,6 @@ def upload_memory(caption, content, emotional_tags, file):
         return {"error": "Source and destination file are the same"}
     except Exception as e:
         return {"error": f"An error occurred: {str(e)}"}
-    finally:
-        # Clean up: remove the temp file if it exists
-        if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
-            try:
-                os.remove(temp_file_path)
-            except Exception as e:
-                print(f"Error removing temp file: {e}")
 
 @handle_api_error
 def search_memories(query):

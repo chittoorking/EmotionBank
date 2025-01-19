@@ -46,7 +46,7 @@ async def read_root():
 
 @app.post("/upload_memory/")
 async def upload_memory(
-    file_path:str = Form(...) ,
+    image_path:str = Form(...) ,
     caption: str = Form(...),
     content: str = Form(...),
     emotional_tags: str = Form(...)
@@ -58,7 +58,7 @@ async def upload_memory(
         
         # Create memory object
         memory = Memory(
-            file_path=file_path,
+            image_path=image_path,
             caption=caption,
             content=content,
             emotional_tags=tags,
